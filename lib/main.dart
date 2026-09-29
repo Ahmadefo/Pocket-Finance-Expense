@@ -174,8 +174,8 @@ class _MainPageState extends State<MainPage> {
       ]);
     }
 
-    // DIUBAH: Hilangkan kata 'const' di ListToCsvConverter()
-    String csvData = ListToCsvConverter().convert(rows);
+    // PERBAIKAN: Gunakan pemanggilan converter standar package csv
+    String csvData = const ListToCsvConverter().convert(rows);
 
     showDialog(
       context: context,
@@ -189,7 +189,6 @@ class _MainPageState extends State<MainPage> {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),
-              // DIUBAH: Gunakan constraints BoxConstraints untuk mengganti maxHeight
               constraints: const BoxConstraints(maxHeight: 200),
               decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
               child: SingleChildScrollView(
@@ -237,8 +236,8 @@ class _MainPageState extends State<MainPage> {
             onPressed: () {
               if (textCtrl.text.isNotEmpty) {
                 try {
-                  // DIUBAH: Hilangkan kata 'const' di CsvToListConverter()
-                  final List<List<dynamic>> fields = CsvToListConverter().convert(textCtrl.text);
+                  // PERBAIKAN: Gunakan pemanggilan converter standar package csv
+                  final List<List<dynamic>> fields = const CsvToListConverter().convert(textCtrl.text);
 
                   if (fields.length <= 1) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format CSV tidak valid.')));
