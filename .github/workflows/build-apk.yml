@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          flutter pub add intl fl_chart csv
+          flutter pub add intl fl_chart
 
       - name: Build APK Release
         run: flutter build apk --release --no-tree-shake-icons
