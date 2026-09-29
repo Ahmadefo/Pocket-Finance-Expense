@@ -24,12 +24,10 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Generate Android Project
+      - name: Generate Android Project & Add Dependencies
         run: |
           flutter create . --platforms=android --overwrite
-
-      - name: Install Dependencies
-        run: flutter pub get
+          flutter pub add intl fl_chart
 
       - name: Build Custom APK Release
         run: flutter build apk --release -t lib/app.dart --no-tree-shake-icons
