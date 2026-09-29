@@ -1,4 +1,4 @@
-import 'package02/flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -401,7 +401,7 @@ class PocketTab extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: p.color.withOpacity(0.2),
+                      backgroundColor: p.color.withValues(alpha: 0.2),
                       child: Icon(p.icon, color: p.color),
                     ),
                     title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -519,7 +519,7 @@ class BudgetStatusTab extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
-              crossAxisAlignment: CrossAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
