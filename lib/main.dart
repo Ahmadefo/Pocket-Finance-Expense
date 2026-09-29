@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -65,7 +64,7 @@ class Pocket {
 
 class TransactionItem {
   String id;
-  String type; // 'Pengeluaran' atau 'Pemasukan'
+  String type;
   String pocketId;
   String pocketName;
   double amount;
@@ -148,7 +147,6 @@ class _MainPageState extends State<MainPage> {
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
-  // Dialog Teks Ekspor
   void _exportDataToCsv(BuildContext context) {
     if (transactions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Belum ada transaksi untuk diekspor.')));
@@ -208,7 +206,6 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  // Dialog Teks Impor
   void _importDataFromCsv(BuildContext context) {
     final textCtrl = TextEditingController();
 
