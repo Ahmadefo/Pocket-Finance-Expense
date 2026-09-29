@@ -174,8 +174,8 @@ class _MainPageState extends State<MainPage> {
       ]);
     }
 
-    // PERBAIKAN: Gunakan pemanggilan converter standar package csv
-    String csvData = const ListToCsvConverter().convert(rows);
+    // TANPA CONST (DIPERBAIKI)
+    String csvData = ListToCsvConverter().convert(rows);
 
     showDialog(
       context: context,
@@ -236,8 +236,8 @@ class _MainPageState extends State<MainPage> {
             onPressed: () {
               if (textCtrl.text.isNotEmpty) {
                 try {
-                  // PERBAIKAN: Gunakan pemanggilan converter standar package csv
-                  final List<List<dynamic>> fields = const CsvToListConverter().convert(textCtrl.text);
+                  // TANPA CONST (DIPERBAIKI)
+                  final List<List<dynamic>> fields = CsvToListConverter().convert(textCtrl.text);
 
                   if (fields.length <= 1) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format CSV tidak valid.')));
