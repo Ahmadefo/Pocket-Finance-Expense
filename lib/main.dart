@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:csv/csv.csv.dart';
+import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(const PocketExpenseApp());
@@ -25,7 +29,6 @@ class PocketExpenseApp extends StatelessWidget {
   }
 }
 
-// Model Pilihan Ikon Kantong
 class IconOption {
   final IconData icon;
   final String name;
@@ -89,7 +92,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  int _currentIndex = 0; // 0: Sisa Budget, 1: Kantong, 2: Pendapatan, 3: Grafik
+  int _currentIndex = 0;
 
   List<Pocket> pockets = [
     Pocket(id: '1', name: 'Makan', budget: 1000000, icon: Icons.fastfood, color: Colors.orange),
@@ -140,23 +143,146 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  // Hitung pengeluaran per kantong untuk bulan/tahun tertentu
   double _getPocketSpentForMonth(String pocketId, int month, int year) {
     return transactions
         .where((t) => t.type == 'Pengeluaran' && t.pocketId == pocketId && t.date.month == month && t.date.year == year)
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
+  // Fungsi Ekspor Data Ke File CSV/Excel
+  Future<void> _exportDataToCsv(BuildContext context) async {
+    if (transactions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Belum ada transaksi untuk diekspor.')));
+      return;
+    }
+
+    final Map<int, String> monthNames = {
+      1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+      7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember',
+    };
+
+    List<List<dynamic>> rows = [];
+    rows.add(['No', 'Tanggal Transaksi', 'Bulan', 'Kantong', 'Keterangan Transaksi', 'Tipe', 'Jumlah']);
+
+    for (int i = 0; i < transactions.length; i++) {
+      final tx = transactions[i];
+      rows.add([
+        i + 1,
+        DateFormat('yyyy-MM-dd').format(tx.date),
+        monthNames[tx.date.month],
+        tx.pocketName,
+        tx.note,
+        tx.type,
+        tx.amount,
+      ]);
+    }
+
+    String csvData = const ListToCsvConverter().convert(rows);
+
+    try {
+      String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Simpan File Ekspor Transaksi',
+        fileName: 'pocket_expense_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv',
+        allowedExtensions: ['csv'],
+        type: FileType.custom,
+      );
+
+      if (outputPath != null) {
+        final file = File(outputPath);
+        await file.writeAsString(csvData);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Data berhasil diekspor ke: $outputPath')));
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengekspor: $e')));
+      }
+    }
+  }
+
+  // Fungsi Impor Data Dari File CSV/Excel
+  Future<void> _importDataFromCsv(BuildContext context) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final input = await file.readAsString();
+        final List<List<dynamic>> fields = const CsvToListConverter().convert(input);
+
+        if (fields.length <= 1) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File kosong atau format salah.')));
+          }
+          return;
+        }
+
+        int importedCount = 0;
+        // Skip baris header (indeks 0)
+        for (int i = 1; i < fields.length; i++) {
+          final row = fields[i];
+          if (row.length >= 7) {
+            final dateStr = row[1].toString();
+            final pocketNameStr = row[3].toString();
+            final noteStr = row[4].toString();
+            final typeStr = row[5].toString();
+            final amountNum = double.tryParse(row[6].toString()) ?? 0.0;
+
+            final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+
+            String pId = 'income';
+            if (typeStr == 'Pengeluaran') {
+              final existingPocket = pockets.firstWhere(
+                (p) => p.name.toLowerCase() == pocketNameStr.toLowerCase(),
+                orElse: () {
+                  final newP = Pocket(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: pocketNameStr,
+                    budget: 1000000,
+                  );
+                  pockets.add(newP);
+                  return newP;
+                },
+              );
+              pId = existingPocket.id;
+            }
+
+            _addTransaction(TransactionItem(
+              id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+              type: typeStr,
+              pocketId: pId,
+              pocketName: pocketNameStr,
+              amount: amountNum,
+              note: noteStr,
+              date: parsedDate,
+            ));
+            importedCount++;
+          }
+        }
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi!')));
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengimpor file: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-
     final pages = [
       // 1. Tab Sisa Budget
       BudgetStatusTab(
         pockets: pockets,
         transactions: transactions,
-        getSpent: (pId) => _getPocketSpentForMonth(pId, now.month, now.year),
+        getSpent: _getPocketSpentForMonth,
         onEditTx: _editTransaction,
         onDeleteTx: _deleteTransaction,
       ),
@@ -179,6 +305,56 @@ class _MainPageState extends State<MainPage> {
       ),
     ];
 
+    Widget? currentFab;
+    if (_currentIndex == 1) {
+      currentFab = FloatingActionButton.extended(
+        key: const ValueKey('btn_add_pocket_tab'),
+        onPressed: () => _showAddPocketDialog(context),
+        backgroundColor: const Color(0xFF3498DB),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('+ Kantong', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+    } else if (_currentIndex == 3) {
+      currentFab = Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'btn_import',
+            onPressed: () => _importDataFromCsv(context),
+            backgroundColor: Colors.teal,
+            icon: const Icon(Icons.file_upload, color: Colors.white),
+            label: const Text('Impor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 12),
+          FloatingActionButton.extended(
+            heroTag: 'btn_export',
+            onPressed: () => _exportDataToCsv(context),
+            backgroundColor: Colors.orange,
+            icon: const Icon(Icons.file_download, color: Colors.white),
+            label: const Text('Ekspor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      );
+    } else {
+      currentFab = FloatingActionButton.extended(
+        key: const ValueKey('btn_add_tx_tab'),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TransactionFormPage(
+                pockets: pockets,
+                onSave: _addTransaction,
+              ),
+            ),
+          );
+        },
+        backgroundColor: const Color(0xFF3498DB),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Transaksi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF3498DB),
@@ -186,31 +362,7 @@ class _MainPageState extends State<MainPage> {
         title: const Text('Pocket Expense', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: pages[_currentIndex],
-      floatingActionButton: _currentIndex == 1
-          ? FloatingActionButton.extended(
-              key: const ValueKey('btn_add_pocket_tab'),
-              onPressed: () => _showAddPocketDialog(context),
-              backgroundColor: const Color(0xFF3498DB),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('+ Kantong', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            )
-          : FloatingActionButton.extended(
-              key: const ValueKey('btn_add_tx_tab'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TransactionFormPage(
-                      pockets: pockets,
-                      onSave: _addTransaction,
-                    ),
-                  ),
-                );
-              },
-              backgroundColor: const Color(0xFF3498DB),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Transaksi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
+      floatingActionButton: currentFab,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -296,10 +448,10 @@ class _MainPageState extends State<MainPage> {
 }
 
 // ------------------- TAB SISA BUDGET -------------------
-class BudgetStatusTab extends StatelessWidget {
+class BudgetStatusTab extends StatefulWidget {
   final List<Pocket> pockets;
   final List<TransactionItem> transactions;
-  final double Function(String pocketId) getSpent;
+  final double Function(String pocketId, int month, int year) getSpent;
   final Function(TransactionItem) onEditTx;
   final Function(String) onDeleteTx;
 
@@ -312,12 +464,24 @@ class BudgetStatusTab extends StatelessWidget {
     required this.onDeleteTx,
   });
 
+  @override
+  State<BudgetStatusTab> createState() => _BudgetStatusTabState();
+}
+
+class _BudgetStatusTabState extends State<BudgetStatusTab> {
+  int selectedMonth = DateTime.now().month;
+  int selectedYear = DateTime.now().year;
+
+  final Map<int, String> monthNames = {
+    1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+    7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember',
+  };
+
   void _showPocketDetail(BuildContext context, Pocket pocket) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
-    final now = DateTime.now();
 
-    final pocketTxList = transactions
-        .where((t) => t.type == 'Pengeluaran' && t.pocketId == pocket.id && t.date.month == now.month && t.date.year == now.year)
+    final pocketTxList = widget.transactions
+        .where((t) => t.type == 'Pengeluaran' && t.pocketId == pocket.id && t.date.month == selectedMonth && t.date.year == selectedYear)
         .toList();
 
     showModalBottomSheet(
@@ -327,7 +491,7 @@ class BudgetStatusTab extends StatelessWidget {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final currentSpent = getSpent(pocket.id);
+            final currentSpent = widget.getSpent(pocket.id, selectedMonth, selectedYear);
             return DraggableScrollableSheet(
               expand: false,
               initialChildSize: 0.75,
@@ -353,11 +517,12 @@ class BudgetStatusTab extends StatelessWidget {
                           Text('Transaksi: ${pocket.name}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      Text('Total Pengeluaran Bulan Ini: ${currencyFormatter.format(currentSpent)}', style: const TextStyle(color: Colors.grey)),
+                      Text('Pengeluaran ${monthNames[selectedMonth]} $selectedYear: ${currencyFormatter.format(currentSpent)}',
+                          style: const TextStyle(color: Colors.grey)),
                       const Divider(height: 24),
                       Expanded(
                         child: pocketTxList.isEmpty
-                            ? const Center(child: Text('Belum ada pengeluaran pada kantong ini bulan ini.'))
+                            ? Center(child: Text('Belum ada pengeluaran di ${monthNames[selectedMonth]} $selectedYear.'))
                             : ListView.builder(
                                 controller: controller,
                                 itemCount: pocketTxList.length,
@@ -384,7 +549,7 @@ class BudgetStatusTab extends StatelessWidget {
                                               if (val == 'edit') {
                                                 _showEditTransactionDialog(context, tx);
                                               } else if (val == 'delete') {
-                                                onDeleteTx(tx.id);
+                                                widget.onDeleteTx(tx.id);
                                                 setModalState(() {
                                                   pocketTxList.removeWhere((t) => t.id == tx.id);
                                                 });
@@ -462,9 +627,9 @@ class BudgetStatusTab extends StatelessWidget {
                     tx.amount = double.parse(amountCtrl.text);
                     tx.note = noteCtrl.text;
                     tx.date = selectedDate;
-                    onEditTx(tx);
+                    widget.onEditTx(tx);
                     Navigator.pop(ctx);
-                    Navigator.pop(context); // refresh bottom sheet
+                    Navigator.pop(context);
                   }
                 },
                 child: const Text('Simpan'),
@@ -480,65 +645,102 @@ class BudgetStatusTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: pockets.length,
-      itemBuilder: (ctx, i) {
-        final p = pockets[i];
-        final spent = getSpent(p.id);
-        final remaining = p.budget - spent;
-        final percent = (spent / p.budget).clamp(0.0, 1.0);
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          child: InkWell(
-            onTap: () => _showPocketDetail(context, p),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        // Dropdown Filter Bulan & Tahun Sisa Budget
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Filter Periode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(p.icon, color: const Color(0xFF3498DB)),
-                          const SizedBox(width: 8),
-                          Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                      Text(
-                        'Sisa: ${currencyFormatter.format(remaining)}',
-                        style: TextStyle(
-                          color: remaining < 0 ? Colors.red : Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  DropdownButton<int>(
+                    value: selectedMonth,
+                    items: monthNames.entries.map((e) {
+                      return DropdownMenuItem(value: e.key, child: Text(e.value));
+                    }).toList(),
+                    onChanged: (v) => setState(() => selectedMonth = v!),
                   ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: percent,
-                    backgroundColor: Colors.grey[200],
-                    color: percent > 0.9 ? Colors.red : const Color(0xFF3498DB),
-                    minHeight: 10,
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: selectedYear,
+                    items: [2024, 2025, 2026, 2027].map((y) {
+                      return DropdownMenuItem(value: y, child: Text('$y'));
+                    }).toList(),
+                    onChanged: (v) => setState(() => selectedYear = v!),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Terpakai: ${currencyFormatter.format(spent)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      Text('Target Budget: ${currencyFormatter.format(p.budget)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  )
                 ],
               ),
-            ),
+            ],
           ),
-        );
-      },
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: widget.pockets.length,
+            itemBuilder: (ctx, i) {
+              final p = widget.pockets[i];
+              final spent = widget.getSpent(p.id, selectedMonth, selectedYear);
+              final remaining = p.budget - spent;
+              final percent = (spent / p.budget).clamp(0.0, 1.0);
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: InkWell(
+                  onTap: () => _showPocketDetail(context, p),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(p.icon, color: const Color(0xFF3498DB)),
+                                const SizedBox(width: 8),
+                                Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              ],
+                            ),
+                            Text(
+                              'Sisa: ${currencyFormatter.format(remaining)}',
+                              style: TextStyle(
+                                color: remaining < 0 ? Colors.red : Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: percent,
+                          backgroundColor: Colors.grey[200],
+                          color: percent > 0.9 ? Colors.red : const Color(0xFF3498DB),
+                          minHeight: 10,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Terpakai: ${currencyFormatter.format(spent)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('Budget: ${currencyFormatter.format(p.budget)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -727,36 +929,24 @@ class ChartTab extends StatefulWidget {
 }
 
 class _ChartTabState extends State<ChartTab> {
-  int selectedMonth = DateTime.now().month; // 0 artinya Semua Bulan
+  int selectedMonth = DateTime.now().month;
   int selectedYear = DateTime.now().year;
 
   final Map<int, String> monthNames = {
     0: 'Semua Bulan (1 Tahun)',
-    1: 'Januari',
-    2: 'Februari',
-    3: 'Maret',
-    4: 'April',
-    5: 'Mei',
-    6: 'Juni',
-    7: 'Juli',
-    8: 'Agustus',
-    9: 'September',
-    10: 'Oktober',
-    11: 'November',
-    12: 'Desember',
+    1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+    7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember',
   };
 
   @override
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
-    // Pengeluaran
     final filteredExpense = widget.transactions.where((t) {
       final isMonthMatch = selectedMonth == 0 || t.date.month == selectedMonth;
       return t.type == 'Pengeluaran' && isMonthMatch && t.date.year == selectedYear;
     }).toList();
 
-    // Pemasukan
     final filteredIncome = widget.transactions.where((t) {
       final isMonthMatch = selectedMonth == 0 || t.date.month == selectedMonth;
       return t.type == 'Pemasukan' && isMonthMatch && t.date.year == selectedYear;
@@ -800,7 +990,6 @@ class _ChartTabState extends State<ChartTab> {
           ),
           const SizedBox(height: 8),
 
-          // Card Informasi Sisa Saldo
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
