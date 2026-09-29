@@ -12,7 +12,7 @@ class PocketExpenseApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'My Pocket',
+      title: 'Pocket Expense',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFF3498DB),
@@ -25,7 +25,6 @@ class PocketExpenseApp extends StatelessWidget {
   }
 }
 
-// --- MODEL DATA ---
 class Pocket {
   String id;
   String name;
@@ -48,7 +47,7 @@ class Pocket {
 
 class TransactionItem {
   String id;
-  String type; // 'Pengeluaran' atau 'Pemasukan'
+  String type;
   String pocketId;
   String pocketName;
   double amount;
@@ -66,7 +65,6 @@ class TransactionItem {
   });
 }
 
-// --- MAIN PAGE WITH NAVIGATION ---
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -138,7 +136,7 @@ class _MainPageState extends State<MainPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF3498DB),
         foregroundColor: Colors.white,
-        title: const Text('Kantong Pencatatan Uang', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Pocket Expense', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: pages[_currentIndex],
       floatingActionButton: FloatingActionButton.extended(
@@ -174,9 +172,6 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// ==========================================
-// FORM TRANSAKSI (Sesuai dengan Tampilan Gambar)
-// ==========================================
 class TransactionFormPage extends StatefulWidget {
   final List<Pocket> pockets;
   final Function(TransactionItem) onSave;
@@ -211,12 +206,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
         backgroundColor: const Color(0xFF3498DB),
         foregroundColor: Colors.white,
         title: const Text('Buat Transaksi'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () {},
-          )
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -231,7 +220,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
               ),
               child: Column(
                 children: [
-                  // Toggle Pengeluaran / Pemasukan
                   Row(
                     children: [
                       Expanded(
@@ -260,8 +248,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // Tanggal
                   Row(
                     children: [
                       const SizedBox(width: 80, child: Text('Tanggal', style: TextStyle(fontSize: 15))),
@@ -289,8 +275,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Kategori / Kantong
                   Row(
                     children: [
                       SizedBox(width: 80, child: Text(selectedType == 'Pengeluaran' ? 'Kantong' : 'Kategori', style: const TextStyle(fontSize: 15))),
@@ -319,8 +303,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Jumlah
                   Row(
                     children: [
                       const SizedBox(width: 80, child: Text('Jumlah', style: TextStyle(fontSize: 15))),
@@ -328,18 +310,15 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                         child: TextField(
                           controller: amountController,
                           keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            suffixIcon: const Icon(Icons.calculate, color: Colors.grey),
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Keterangan
                   Row(
                     children: [
                       const SizedBox(width: 80, child: Text('Keterangan', style: TextStyle(fontSize: 15))),
@@ -358,8 +337,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Tombol Simpan
             SizedBox(
               width: 160,
               height: 45,
@@ -394,9 +371,6 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
   }
 }
 
-// ==========================================
-// TAB 1: KANTONG (TAMBAH, EDIT, HAPUS)
-// ==========================================
 class PocketTab extends StatelessWidget {
   final List<Pocket> pockets;
   final Function(Pocket) onAddPocket;
@@ -468,7 +442,7 @@ class PocketTab extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Kantong (misal: Makan)')),
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Kantong')),
             TextField(controller: budgetCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Budget (Rp)')),
           ],
         ),
@@ -524,9 +498,6 @@ class PocketTab extends StatelessWidget {
   }
 }
 
-// ==========================================
-// TAB 2: SISA BUDGET KANTONG
-// ==========================================
 class BudgetStatusTab extends StatelessWidget {
   final List<Pocket> pockets;
 
@@ -585,9 +556,6 @@ class BudgetStatusTab extends StatelessWidget {
   }
 }
 
-// ==========================================
-// TAB 3: PENDAPATAN / PEMASUKAN
-// ==========================================
 class IncomeTab extends StatelessWidget {
   final List<TransactionItem> transactions;
   final double totalIncome;
@@ -642,9 +610,6 @@ class IncomeTab extends StatelessWidget {
   }
 }
 
-// ==========================================
-// TAB 4: GRAFIK / CHART DENGAN FILTER
-// ==========================================
 class ChartTab extends StatefulWidget {
   final List<TransactionItem> transactions;
   final List<Pocket> pockets;
@@ -663,12 +628,10 @@ class _ChartTabState extends State<ChartTab> {
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
-    // Filter transaksi berdasarkan bulan & tahun
     final filteredTx = widget.transactions.where((t) {
       return t.type == 'Pengeluaran' && t.date.month == selectedMonth && t.date.year == selectedYear;
     }).toList();
 
-    // Hitung total per kantong
     Map<String, double> pocketTotals = {};
     for (var p in widget.pockets) {
       pocketTotals[p.name] = 0;
@@ -681,7 +644,6 @@ class _ChartTabState extends State<ChartTab> {
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          // Filter Bulan & Tahun
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -703,8 +665,6 @@ class _ChartTabState extends State<ChartTab> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Area Chart
           Expanded(
             child: filteredTx.isEmpty
                 ? const Center(child: Text('Tidak ada pengeluaran pada periode ini.'))
