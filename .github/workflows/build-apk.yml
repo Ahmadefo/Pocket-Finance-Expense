@@ -40,35 +40,9 @@ jobs:
             cp lib/main.dart.bak lib/main.dart
           fi
 
-      - name: Create Custom Pubspec
-        run: |
-          cat << 'EOF' > pubspec.yaml
-          name: pocket_expense
-          description: Pocket Expense App
-          publish_to: 'none'
-          version: 1.0.0+1
-
-          environment:
-            sdk: '>=3.0.0 <4.0.0'
-
-          dependencies:
-            flutter:
-              sdk: flutter
-            cupertino_icons: ^1.0.6
-            intl: ^0.19.0
-            fl_chart: ^0.66.0
-            csv: ^6.0.0
-
-          dev_dependencies:
-            flutter_test:
-              sdk: flutter
-
-          flutter:
-            uses-material-design: true
-          EOF
-
       - name: Install Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub add intl fl_chart csv
 
       - name: Build APK Release
         run: flutter build apk --release --no-tree-shake-icons
