@@ -24,13 +24,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Generate Android Project & Add Dependencies
-        run: |
-          flutter create . --platforms=android --overwrite
-          flutter pub add intl fl_chart
+      - name: Install Dependencies
+        run: flutter pub get
 
-      - name: Build Custom APK Release
-        run: flutter build apk --release -t lib/app.dart --no-tree-shake-icons
+      - name: Build APK Release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
