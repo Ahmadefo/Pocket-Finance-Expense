@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:csv/csv.csv.dart';
+import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 
 void main() {
@@ -149,7 +149,6 @@ class _MainPageState extends State<MainPage> {
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
-  // Fungsi Ekspor Data Ke File CSV/Excel
   Future<void> _exportDataToCsv(BuildContext context) async {
     if (transactions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Belum ada transaksi untuk diekspor.')));
@@ -201,7 +200,6 @@ class _MainPageState extends State<MainPage> {
     }
   }
 
-  // Fungsi Impor Data Dari File CSV/Excel
   Future<void> _importDataFromCsv(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -222,7 +220,6 @@ class _MainPageState extends State<MainPage> {
         }
 
         int importedCount = 0;
-        // Skip baris header (indeks 0)
         for (int i = 1; i < fields.length; i++) {
           final row = fields[i];
           if (row.length >= 7) {
@@ -278,7 +275,6 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      // 1. Tab Sisa Budget
       BudgetStatusTab(
         pockets: pockets,
         transactions: transactions,
@@ -286,19 +282,16 @@ class _MainPageState extends State<MainPage> {
         onEditTx: _editTransaction,
         onDeleteTx: _deleteTransaction,
       ),
-      // 2. Tab Kantong
       PocketTab(
         pockets: pockets,
         onAddPocket: _addPocket,
         onEditPocket: _editPocket,
         onDeletePocket: _deletePocket,
       ),
-      // 3. Tab Pendapatan
       IncomeTab(
         transactions: transactions.where((t) => t.type == 'Pemasukan').toList(),
         onAddIncome: _addTransaction,
       ),
-      // 4. Tab Grafik
       ChartTab(
         transactions: transactions,
         pockets: pockets,
@@ -410,7 +403,7 @@ class _MainPageState extends State<MainPage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFF3498DB).withOpacity(0.2) : Colors.grey[100],
+                            color: isSelected ? const Color(0xFF3498DB).withValues(alpha: 0.2) : Colors.grey[100],
                             border: Border.all(color: isSelected ? const Color(0xFF3498DB) : Colors.transparent, width: 2),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -447,7 +440,6 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// ------------------- TAB SISA BUDGET -------------------
 class BudgetStatusTab extends StatefulWidget {
   final List<Pocket> pockets;
   final List<TransactionItem> transactions;
@@ -647,7 +639,6 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
 
     return Column(
       children: [
-        // Dropdown Filter Bulan & Tahun Sisa Budget
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: Colors.white,
@@ -745,7 +736,6 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
   }
 }
 
-// ------------------- TAB KANTONG -------------------
 class PocketTab extends StatelessWidget {
   final List<Pocket> pockets;
   final Function(Pocket) onAddPocket;
@@ -776,7 +766,7 @@ class PocketTab extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: const Color(0xFF3498DB).withOpacity(0.2),
+                      backgroundColor: const Color(0xFF3498DB).withValues(alpha: 0.2),
                       child: Icon(p.icon, color: const Color(0xFF3498DB)),
                     ),
                     title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -832,7 +822,7 @@ class PocketTab extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFF3498DB).withOpacity(0.2) : Colors.grey[100],
+                            color: isSelected ? const Color(0xFF3498DB).withValues(alpha: 0.2) : Colors.grey[100],
                             border: Border.all(color: isSelected ? const Color(0xFF3498DB) : Colors.transparent, width: 2),
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -863,7 +853,6 @@ class PocketTab extends StatelessWidget {
   }
 }
 
-// ------------------- TAB PENDAPATAN -------------------
 class IncomeTab extends StatelessWidget {
   final List<TransactionItem> transactions;
   final Function(TransactionItem) onAddIncome;
@@ -917,7 +906,6 @@ class IncomeTab extends StatelessWidget {
   }
 }
 
-// ------------------- TAB GRAFIK -------------------
 class ChartTab extends StatefulWidget {
   final List<TransactionItem> transactions;
   final List<Pocket> pockets;
@@ -1068,7 +1056,6 @@ class _ChartTabState extends State<ChartTab> {
   }
 }
 
-// ------------------- FORM TRANSAKSI -------------------
 class TransactionFormPage extends StatefulWidget {
   final List<Pocket> pockets;
   final Function(TransactionItem) onSave;
