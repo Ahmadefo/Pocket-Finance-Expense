@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
-import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(const PocketExpenseApp());
@@ -149,7 +148,8 @@ class _MainPageState extends State<MainPage> {
         .fold(0.0, (sum, item) => sum + item.amount);
   }
 
-  Future<void> _exportDataToCsv(BuildContext context) async {
+  // Dialog Teks Ekspor
+  void _exportDataToCsv(BuildContext context) {
     if (transactions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Belum ada transaksi untuk diekspor.')));
       return;
@@ -178,98 +178,127 @@ class _MainPageState extends State<MainPage> {
 
     String csvData = const ListToCsvConverter().convert(rows);
 
-    try {
-      String? outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Simpan File Ekspor Transaksi',
-        fileName: 'pocket_expense_export_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv',
-        allowedExtensions: ['csv'],
-        type: FileType.custom,
-      );
-
-      if (outputPath != null) {
-        final file = File(outputPath);
-        await file.writeAsString(csvData);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Data berhasil diekspor ke: $outputPath')));
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengekspor: $e')));
-      }
-    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Data Ekspor CSV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Salin seluruh teks di bawah ini untuk disimpan/diimpor kembali:', style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              maxHeight: 200,
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
+              child: SingleChildScrollView(
+                child: SelectableText(csvData, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tutup'),
+          )
+        ],
+      ),
+    );
   }
 
-  Future<void> _importDataFromCsv(BuildContext context) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
+  // Dialog Teks Impor
+  void _importDataFromCsv(BuildContext context) {
+    final textCtrl = TextEditingController();
 
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        final input = await file.readAsString();
-        final List<List<dynamic>> fields = const CsvToListConverter().convert(input);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Impor Data CSV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Tempelkan (Paste) teks CSV transaksi di sini:', style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: textCtrl,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'No,Tanggal Transaksi,Bulan,Kantong...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              if (textCtrl.text.isNotEmpty) {
+                try {
+                  final List<List<dynamic>> fields = const CsvToListConverter().convert(textCtrl.text);
 
-        if (fields.length <= 1) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File kosong atau format salah.')));
-          }
-          return;
-        }
+                  if (fields.length <= 1) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format CSV tidak valid.')));
+                    return;
+                  }
 
-        int importedCount = 0;
-        for (int i = 1; i < fields.length; i++) {
-          final row = fields[i];
-          if (row.length >= 7) {
-            final dateStr = row[1].toString();
-            final pocketNameStr = row[3].toString();
-            final noteStr = row[4].toString();
-            final typeStr = row[5].toString();
-            final amountNum = double.tryParse(row[6].toString()) ?? 0.0;
+                  int importedCount = 0;
+                  for (int i = 1; i < fields.length; i++) {
+                    final row = fields[i];
+                    if (row.length >= 7) {
+                      final dateStr = row[1].toString();
+                      final pocketNameStr = row[3].toString();
+                      final noteStr = row[4].toString();
+                      final typeStr = row[5].toString();
+                      final amountNum = double.tryParse(row[6].toString()) ?? 0.0;
 
-            final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+                      final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
 
-            String pId = 'income';
-            if (typeStr == 'Pengeluaran') {
-              final existingPocket = pockets.firstWhere(
-                (p) => p.name.toLowerCase() == pocketNameStr.toLowerCase(),
-                orElse: () {
-                  final newP = Pocket(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: pocketNameStr,
-                    budget: 1000000,
-                  );
-                  pockets.add(newP);
-                  return newP;
-                },
-              );
-              pId = existingPocket.id;
-            }
+                      String pId = 'income';
+                      if (typeStr == 'Pengeluaran') {
+                        final existingPocket = pockets.firstWhere(
+                          (p) => p.name.toLowerCase() == pocketNameStr.toLowerCase(),
+                          orElse: () {
+                            final newP = Pocket(
+                              id: DateTime.now().millisecondsSinceEpoch.toString(),
+                              name: pocketNameStr,
+                              budget: 1000000,
+                            );
+                            pockets.add(newP);
+                            return newP;
+                          },
+                        );
+                        pId = existingPocket.id;
+                      }
 
-            _addTransaction(TransactionItem(
-              id: '${DateTime.now().millisecondsSinceEpoch}_$i',
-              type: typeStr,
-              pocketId: pId,
-              pocketName: pocketNameStr,
-              amount: amountNum,
-              note: noteStr,
-              date: parsedDate,
-            ));
-            importedCount++;
-          }
-        }
+                      _addTransaction(TransactionItem(
+                        id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+                        type: typeStr,
+                        pocketId: pId,
+                        pocketName: pocketNameStr,
+                        amount: amountNum,
+                        note: noteStr,
+                        date: parsedDate,
+                      ));
+                      importedCount++;
+                    }
+                  }
 
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi!')));
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengimpor file: $e')));
-      }
-    }
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi!')));
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal impor: $e')));
+                }
+              }
+            },
+            child: const Text('Impor'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
