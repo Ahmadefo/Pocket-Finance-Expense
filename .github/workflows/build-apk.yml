@@ -42,6 +42,59 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          flutter pub add intl fl_chart csv file_picker
+
+      - name: Build APK Release
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apkname: Build Flutter APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Ensure lib Directory and Backup Main
+        run: |
+          mkdir -p lib
+          if [ -f lib/main.dart ]; then
+            cp lib/main.dart lib/main.dart.bak
+          fi
+
+      - name: Generate Android System
+        run: flutter create . --project-name=pocket_expense --platforms=android --overwrite
+
+      - name: Restore Custom Main
+        run: |
+          if [ -f lib/main.dart.bak ]; then
+            cp lib/main.dart.bak lib/main.dart
+          fi
+
+      - name: Install Dependencies
+        run: |
           flutter pub add intl fl_chart
 
       - name: Build APK Release
