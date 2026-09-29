@@ -24,6 +24,15 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Back Up Custom Main
+        run: cp lib/main.dart lib/main.dart.bak
+
+      - name: Generate Android System
+        run: flutter create . --project-name=pocket_expense --platforms=android --overwrite
+
+      - name: Restore Custom Main
+        run: cp lib/main.dart.bak lib/main.dart
+
       - name: Install Dependencies
         run: flutter pub get
 
