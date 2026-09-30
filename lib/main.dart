@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const PocketExpenseApp());
 }
 
@@ -87,6 +89,20 @@ class Pocket {
     this.icon = Icons.account_balance_wallet,
     this.color = Colors.blue,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'budget': budget,
+        'iconCodePoint': icon.codePoint,
+      };
+
+  factory Pocket.fromJson(Map<String, dynamic> json) => Pocket(
+        id: json['id'],
+        name: json['name'],
+        budget: (json['budget'] as num).toDouble(),
+        icon: IconData(json['iconCodePoint'] ?? Icons.account_balance_wallet.codePoint, fontFamily: 'MaterialIcons'),
+      );
 }
 
 class TransactionItem {
@@ -107,6 +123,26 @@ class TransactionItem {
     required this.note,
     required this.date,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'pocketId': pocketId,
+        'pocketName': pocketName,
+        'amount': amount,
+        'note': note,
+        'date': date.toIso8601String(),
+      };
+
+  factory TransactionItem.fromJson(Map<String, dynamic> json) => TransactionItem(
+        id: json['id'],
+        type: json['type'],
+        pocketId: json['pocketId'],
+        pocketName: json['pocketName'],
+        amount: (json['amount'] as num).toDouble(),
+        note: json['note'],
+        date: DateTime.parse(json['date']),
+      );
 }
 
 class MainPage extends StatefulWidget {
@@ -118,6 +154,7 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 0;
+  bool _isLoading = true;
 
   List<Pocket> pockets = [
     Pocket(id: '1', name: 'Makan', budget: 1000000, icon: Icons.fastfood, color: Colors.orange),
@@ -127,10 +164,47 @@ class _MainPageState extends State<MainPage> {
 
   List<TransactionItem> transactions = [];
 
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalData();
+  }
+
+  Future<void> _loadLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    final String? pocketsString = prefs.getString('saved_pockets');
+    if (pocketsString != null) {
+      final List dynamicList = jsonDecode(pocketsString);
+      pockets = dynamicList.map((item) => Pocket.fromJson(item)).toList();
+    }
+
+    final String? transactionsString = prefs.getString('saved_transactions');
+    if (transactionsString != null) {
+      final List dynamicList = jsonDecode(transactionsString);
+      transactions = dynamicList.map((item) => TransactionItem.fromJson(item)).toList();
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    final String pocketsString = jsonEncode(pockets.map((p) => p.toJson()).toList());
+    await prefs.setString('saved_pockets', pocketsString);
+
+    final String transactionsString = jsonEncode(transactions.map((t) => t.toJson()).toList());
+    await prefs.setString('saved_transactions', transactionsString);
+  }
+
   void _addTransaction(TransactionItem tx) {
     setState(() {
       transactions.insert(0, tx);
     });
+    _saveLocalData();
   }
 
   void _editTransaction(TransactionItem updatedTx) {
@@ -140,16 +214,19 @@ class _MainPageState extends State<MainPage> {
         transactions[index] = updatedTx;
       }
     });
+    _saveLocalData();
   }
 
   void _deleteTransaction(String id) {
     setState(() {
       transactions.removeWhere((t) => t.id == id);
     });
+    _saveLocalData();
   }
 
   void _addPocket(Pocket pocket) {
     setState(() => pockets.add(pocket));
+    _saveLocalData();
   }
 
   void _editPocket(String id, String newName, double newBudget, IconData newIcon) {
@@ -159,6 +236,7 @@ class _MainPageState extends State<MainPage> {
       p.budget = newBudget;
       p.icon = newIcon;
     });
+    _saveLocalData();
   }
 
   void _deletePocket(String id) {
@@ -166,6 +244,7 @@ class _MainPageState extends State<MainPage> {
       pockets.removeWhere((p) => p.id == id);
       transactions.removeWhere((t) => t.pocketId == id);
     });
+    _saveLocalData();
   }
 
   double _getPocketSpentForMonth(String pocketId, int month, int year) {
@@ -320,7 +399,7 @@ class _MainPageState extends State<MainPage> {
                         pId = existingPocket.id;
                       }
 
-                      _addTransaction(TransactionItem(
+                      transactions.insert(0, TransactionItem(
                         id: '${DateTime.now().millisecondsSinceEpoch}_$i',
                         type: typeStr,
                         pocketId: pId,
@@ -332,6 +411,9 @@ class _MainPageState extends State<MainPage> {
                       importedCount++;
                     }
                   }
+
+                  _saveLocalData();
+                  setState(() {});
 
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi!')));
@@ -349,6 +431,12 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final pages = [
       BudgetStatusTab(
         pockets: pockets,
@@ -543,13 +631,21 @@ class BudgetStatusTab extends StatefulWidget {
 }
 
 class _BudgetStatusTabState extends State<BudgetStatusTab> {
-  int selectedMonth = DateTime.now().month;
-  int selectedYear = DateTime.now().year;
+  late int selectedMonth;
+  late int selectedYear;
 
   final Map<int, String> monthNames = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
     7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    selectedMonth = now.month;
+    selectedYear = now.year;
+  }
 
   void _showPocketDetail(BuildContext context, Pocket pocket) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
@@ -726,6 +822,17 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
+    final currentYearNow = DateTime.now().year;
+    final List<int> availableYears = List.generate(
+      (currentYearNow + 2) - 2024 + 1,
+      (index) => 2024 + index,
+    );
+
+    if (!availableYears.contains(selectedYear)) {
+      availableYears.add(selectedYear);
+      availableYears.sort();
+    }
+
     return Column(
       children: [
         Container(
@@ -747,7 +854,7 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
                   const SizedBox(width: 8),
                   DropdownButton<int>(
                     value: selectedYear,
-                    items: [2024, 2025, 2026, 2027].map((y) {
+                    items: availableYears.map((y) {
                       return DropdownMenuItem(value: y, child: Text('$y'));
                     }).toList(),
                     onChanged: (v) => setState(() => selectedYear = v!),
@@ -949,7 +1056,7 @@ class PocketTab extends StatelessWidget {
   }
 }
 
-class IncomeTab extends StatelessWidget {
+class IncomeTab extends StatefulWidget {
   final List<TransactionItem> transactions;
   final Function(TransactionItem) onEditIncome;
   final Function(String) onDeleteIncome;
@@ -960,6 +1067,27 @@ class IncomeTab extends StatelessWidget {
     required this.onEditIncome,
     required this.onDeleteIncome,
   });
+
+  @override
+  State<IncomeTab> createState() => _IncomeTabState();
+}
+
+class _IncomeTabState extends State<IncomeTab> {
+  late int selectedMonth;
+  late int selectedYear;
+
+  final Map<int, String> monthNames = {
+    1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+    7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    selectedMonth = now.month;
+    selectedYear = now.year;
+  }
 
   void _showEditIncomeDialog(BuildContext context, TransactionItem tx) {
     final formatter = NumberFormat.decimalPattern('id_ID');
@@ -1011,7 +1139,7 @@ class IncomeTab extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () {
-                  onDeleteIncome(tx.id);
+                  widget.onDeleteIncome(tx.id);
                   Navigator.pop(ctx);
                 },
                 child: const Text('Hapus', style: TextStyle(color: Colors.red)),
@@ -1023,7 +1151,7 @@ class IncomeTab extends StatelessWidget {
                     tx.amount = double.parse(cleanAmount);
                     tx.note = noteCtrl.text;
                     tx.date = selectedDate;
-                    onEditIncome(tx);
+                    widget.onEditIncome(tx);
                     Navigator.pop(ctx);
                   }
                 },
@@ -1039,30 +1167,82 @@ class IncomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
-    final totalIncome = transactions.fold(0.0, (sum, item) => sum + item.amount);
+
+    final currentYearNow = DateTime.now().year;
+    final List<int> availableYears = List.generate(
+      (currentYearNow + 2) - 2024 + 1,
+      (index) => 2024 + index,
+    );
+
+    if (!availableYears.contains(selectedYear)) {
+      availableYears.add(selectedYear);
+      availableYears.sort();
+    }
+
+    final filteredTransactions = widget.transactions
+        .where((t) => t.date.month == selectedMonth && t.date.year == selectedYear)
+        .toList();
+
+    final totalIncome = filteredTransactions.fold(0.0, (sum, item) => sum + item.amount);
 
     return Column(
       children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Colors.white,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Filter Periode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Row(
+                children: [
+                  DropdownButton<int>(
+                    value: selectedMonth,
+                    items: monthNames.entries.map((e) {
+                      return DropdownMenuItem(value: e.key, child: Text(e.value));
+                    }).toList(),
+                    onChanged: (v) => setState(() => selectedMonth = v!),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: selectedYear,
+                    items: availableYears.map((y) {
+                      return DropdownMenuItem(value: y, child: Text('$y'));
+                    }).toList(),
+                    onChanged: (v) => setState(() => selectedYear = v!),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           color: Colors.green[100],
           child: Column(
             children: [
-              const Text('Total Pendapatan Terinput', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              Text(
+                'Total Pendapatan (${monthNames[selectedMonth]} $selectedYear)',
+                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
-              Text(currencyFormatter.format(totalIncome), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green)),
+              Text(
+                currencyFormatter.format(totalIncome),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: transactions.isEmpty
-              ? const Center(child: Text('Belum ada data pendapatan.'))
+          child: filteredTransactions.isEmpty
+              ? Center(child: Text('Belum ada data pendapatan di bulan ${monthNames[selectedMonth]} $selectedYear.'))
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
-                  itemCount: transactions.length,
+                  itemCount: filteredTransactions.length,
                   itemBuilder: (ctx, i) {
-                    final tx = transactions[i];
+                    final tx = filteredTransactions[i];
                     return Card(
                       child: ListTile(
                         onTap: () => _showEditIncomeDialog(context, tx),
@@ -1098,8 +1278,8 @@ class ChartTab extends StatefulWidget {
 }
 
 class _ChartTabState extends State<ChartTab> {
-  int selectedMonth = DateTime.now().month;
-  int selectedYear = DateTime.now().year;
+  late int selectedMonth;
+  late int selectedYear;
 
   final Map<int, String> monthNames = {
     0: 'Semua Bulan (1 Tahun)',
@@ -1108,8 +1288,27 @@ class _ChartTabState extends State<ChartTab> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    selectedMonth = now.month;
+    selectedYear = now.year;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+
+    final currentYearNow = DateTime.now().year;
+    final List<int> availableYears = List.generate(
+      (currentYearNow + 2) - 2024 + 1,
+      (index) => 2024 + index,
+    );
+
+    if (!availableYears.contains(selectedYear)) {
+      availableYears.add(selectedYear);
+      availableYears.sort();
+    }
 
     final filteredExpense = widget.transactions.where((t) {
       final isMonthMatch = selectedMonth == 0 || t.date.month == selectedMonth;
@@ -1150,7 +1349,7 @@ class _ChartTabState extends State<ChartTab> {
               const SizedBox(width: 16),
               DropdownButton<int>(
                 value: selectedYear,
-                items: [2024, 2025, 2026, 2027].map((y) {
+                items: availableYears.map((y) {
                   return DropdownMenuItem(value: y, child: Text('$y'));
                 }).toList(),
                 onChanged: (v) => setState(() => selectedYear = v!),
