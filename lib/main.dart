@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:file_saver/file_saver.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -307,92 +307,109 @@ class _MainPageState extends State<MainPage> {
 
     String csvData = _listToCsv(rows);
     try {
-      String? path = await FileSaver.instance.saveFile(
-        name: 'pocket_expense_backup_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}',
-        bytes: utf8.encode(csvData),
-        ext: 'csv',
-        mimeType: MimeType.csv,
-      );
+      final directory = await getTemporaryDirectory();
+      final fileName = 'pocket_expense_backup_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final path = '${directory.path}/$fileName';
+      final file = File(path);
+      await file.writeAsString(csvData);
 
-      if (path != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengunduh file CSV ke: $path')));
-      }
+      await Share.shareXFiles([XFile(path)], text: 'Backup Data Pocket Expense (CSV)');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal mengekspor file: $e')));
     }
   }
 
-  Future<void> _importDataFromCsv(BuildContext context) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
+  void _importDataFromCsv(BuildContext context) {
+    final textCtrl = TextEditingController();
 
-      if (result != null && result.files.single.bytes != null || result?.files.single.path != null) {
-        String csvText = '';
-        if (result.files.single.bytes != null) {
-          csvText = utf8.decode(result.files.single.bytes!);
-        } else if (result.files.single.path != null) {
-          final file = File(result.files.single.path!);
-          csvText = await file.readAsString();
-        }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Impor Data CSV'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Tempelkan teks isi file CSV kamu di bawah ini:', style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: textCtrl,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'No,Tanggal Transaksi,Bulan,Kantong...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              if (textCtrl.text.isNotEmpty) {
+                try {
+                  final List<List<String>> fields = _csvToList(textCtrl.text);
+                  if (fields.length <= 1) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format CSV tidak valid.')));
+                    return;
+                  }
 
-        final List<List<String>> fields = _csvToList(csvText);
-        if (fields.length <= 1) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format file CSV kosong atau tidak valid.')));
-          return;
-        }
+                  int importedCount = 0;
+                  for (int i = 1; i < fields.length; i++) {
+                    final row = fields[i];
+                    if (row.length >= 7) {
+                      final dateStr = row[1];
+                      final pocketNameStr = row[3];
+                      final noteStr = row[4];
+                      final typeStr = row[5];
+                      final amountNum = double.tryParse(row[6]) ?? 0.0;
 
-        int importedCount = 0;
-        for (int i = 1; i < fields.length; i++) {
-          final row = fields[i];
-          if (row.length >= 7) {
-            final dateStr = row[1];
-            final pocketNameStr = row[3];
-            final noteStr = row[4];
-            final typeStr = row[5];
-            final amountNum = double.tryParse(row[6]) ?? 0.0;
+                      final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
 
-            final parsedDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+                      String pId = 'income';
+                      if (typeStr == 'Pengeluaran') {
+                        final existingPocket = pockets.firstWhere(
+                          (p) => p.name.toLowerCase() == pocketNameStr.toLowerCase(),
+                          orElse: () {
+                            final newP = Pocket(
+                              id: DateTime.now().millisecondsSinceEpoch.toString(),
+                              name: pocketNameStr,
+                              budget: 1000000,
+                            );
+                            pockets.add(newP);
+                            return newP;
+                          },
+                        );
+                        pId = existingPocket.id;
+                      }
 
-            String pId = 'income';
-            if (typeStr == 'Pengeluaran') {
-              final existingPocket = pockets.firstWhere(
-                (p) => p.name.toLowerCase() == pocketNameStr.toLowerCase(),
-                orElse: () {
-                  final newP = Pocket(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: pocketNameStr,
-                    budget: 1000000,
-                  );
-                  pockets.add(newP);
-                  return newP;
-                },
-              );
-              pId = existingPocket.id;
-            }
+                      transactions.insert(0, TransactionItem(
+                        id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+                        type: typeStr,
+                        pocketId: pId,
+                        pocketName: pocketNameStr,
+                        amount: amountNum,
+                        note: noteStr,
+                        date: parsedDate,
+                      ));
+                      importedCount++;
+                    }
+                  }
 
-            transactions.insert(0, TransactionItem(
-              id: '${DateTime.now().millisecondsSinceEpoch}_$i',
-              type: typeStr,
-              pocketId: pId,
-              pocketName: pocketNameStr,
-              amount: amountNum,
-              note: noteStr,
-              date: parsedDate,
-            ));
-            importedCount++;
-          }
-        }
-
-        await _saveLocalData();
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi dari file!')));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal impor file CSV: $e')));
-    }
+                  await _saveLocalData();
+                  setState(() {});
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Berhasil mengimpor $importedCount transaksi!')));
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal impor: $e')));
+                }
+              }
+            },
+            child: const Text('Impor'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -446,7 +463,7 @@ class _MainPageState extends State<MainPage> {
             onPressed: () => _importDataFromCsv(context),
             backgroundColor: Colors.teal,
             icon: const Icon(Icons.file_upload, color: Colors.white),
-            label: const Text('Impor File', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            label: const Text('Impor CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(width: 8),
           FloatingActionButton.extended(
@@ -454,7 +471,7 @@ class _MainPageState extends State<MainPage> {
             onPressed: () => _exportDataToCsv(context),
             backgroundColor: Colors.orange,
             icon: const Icon(Icons.file_download, color: Colors.white),
-            label: const Text('Unduh CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            label: const Text('Ekspor CSV', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       );
