@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          flutter pub add intl fl_chart shared_preferences file_saver file_picker path_provider
+          flutter pub add intl fl_chart shared_preferences path_provider share_plus
           flutter pub get
 
       - name: Build APK Release
