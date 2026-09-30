@@ -1,10 +1,38 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
 void main() {
   runApp(const PocketExpenseApp());
+}
+
+class ThousandsSeparatorInputFormatter extends TextInputFormatter {
+  final NumberFormat _formatter = NumberFormat.decimalPattern('id_ID');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+
+    String digitsOnly = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    if (digitsOnly.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+
+    double value = double.parse(digitsOnly);
+    String formatted = _formatter.format(value);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
 }
 
 class PocketExpenseApp extends StatelessWidget {
@@ -337,7 +365,8 @@ class _MainPageState extends State<MainPage> {
       ),
       IncomeTab(
         transactions: transactions.where((t) => t.type == 'Pemasukan').toList(),
-        onAddIncome: _addTransaction,
+        onEditIncome: _editTransaction,
+        onDeleteIncome: _deleteTransaction,
       ),
       ChartTab(
         transactions: transactions,
@@ -436,7 +465,12 @@ class _MainPageState extends State<MainPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Kantong')),
-                  TextField(controller: budgetCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target Budget (Rp)')),
+                  TextField(
+                    controller: budgetCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [ThousandsSeparatorInputFormatter()],
+                    decoration: const InputDecoration(labelText: 'Target Budget (Rp)'),
+                  ),
                   const SizedBox(height: 16),
                   const Text('Pilih Ikon:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 8),
@@ -467,10 +501,11 @@ class _MainPageState extends State<MainPage> {
               ElevatedButton(
                 onPressed: () {
                   if (nameCtrl.text.isNotEmpty && budgetCtrl.text.isNotEmpty) {
+                    final cleanBudgetStr = budgetCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
                     _addPocket(Pocket(
                       id: DateTime.now().toString(),
                       name: nameCtrl.text,
-                      budget: double.parse(budgetCtrl.text),
+                      budget: double.parse(cleanBudgetStr),
                       icon: selectedIcon,
                       color: Colors.blueAccent,
                     ));
@@ -618,7 +653,8 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
   }
 
   void _showEditTransactionDialog(BuildContext context, TransactionItem tx) {
-    final amountCtrl = TextEditingController(text: tx.amount.toStringAsFixed(0));
+    final formatter = NumberFormat.decimalPattern('id_ID');
+    final amountCtrl = TextEditingController(text: formatter.format(tx.amount));
     final noteCtrl = TextEditingController(text: tx.note);
     DateTime selectedDate = tx.date;
 
@@ -631,7 +667,12 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Jumlah (Rp)')),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [ThousandsSeparatorInputFormatter()],
+                  decoration: const InputDecoration(labelText: 'Jumlah (Rp)'),
+                ),
                 TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Keterangan')),
                 const SizedBox(height: 12),
                 InkWell(
@@ -663,7 +704,8 @@ class _BudgetStatusTabState extends State<BudgetStatusTab> {
               ElevatedButton(
                 onPressed: () {
                   if (amountCtrl.text.isNotEmpty) {
-                    tx.amount = double.parse(amountCtrl.text);
+                    final cleanAmount = amountCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+                    tx.amount = double.parse(cleanAmount);
                     tx.note = noteCtrl.text;
                     tx.date = selectedDate;
                     widget.onEditTx(tx);
@@ -839,8 +881,9 @@ class PocketTab extends StatelessWidget {
   }
 
   void _showEditDialog(BuildContext context, Pocket pocket) {
+    final formatter = NumberFormat.decimalPattern('id_ID');
     final nameCtrl = TextEditingController(text: pocket.name);
-    final budgetCtrl = TextEditingController(text: pocket.budget.toStringAsFixed(0));
+    final budgetCtrl = TextEditingController(text: formatter.format(pocket.budget));
     IconData selectedIcon = pocket.icon;
 
     showDialog(
@@ -855,7 +898,12 @@ class PocketTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Kantong')),
-                  TextField(controller: budgetCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Budget (Rp)')),
+                  TextField(
+                    controller: budgetCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [ThousandsSeparatorInputFormatter()],
+                    decoration: const InputDecoration(labelText: 'Budget (Rp)'),
+                  ),
                   const SizedBox(height: 16),
                   const Text('Pilih Ikon:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 8),
@@ -886,7 +934,8 @@ class PocketTab extends StatelessWidget {
               ElevatedButton(
                 onPressed: () {
                   if (nameCtrl.text.isNotEmpty && budgetCtrl.text.isNotEmpty) {
-                    onEditPocket(pocket.id, nameCtrl.text, double.parse(budgetCtrl.text), selectedIcon);
+                    final cleanBudgetStr = budgetCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+                    onEditPocket(pocket.id, nameCtrl.text, double.parse(cleanBudgetStr), selectedIcon);
                     Navigator.pop(ctx);
                   }
                 },
@@ -902,13 +951,90 @@ class PocketTab extends StatelessWidget {
 
 class IncomeTab extends StatelessWidget {
   final List<TransactionItem> transactions;
-  final Function(TransactionItem) onAddIncome;
+  final Function(TransactionItem) onEditIncome;
+  final Function(String) onDeleteIncome;
 
   const IncomeTab({
     super.key,
     required this.transactions,
-    required this.onAddIncome,
+    required this.onEditIncome,
+    required this.onDeleteIncome,
   });
+
+  void _showEditIncomeDialog(BuildContext context, TransactionItem tx) {
+    final formatter = NumberFormat.decimalPattern('id_ID');
+    final amountCtrl = TextEditingController(text: formatter.format(tx.amount));
+    final noteCtrl = TextEditingController(text: tx.note);
+    DateTime selectedDate = tx.date;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit Pendapatan'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [ThousandsSeparatorInputFormatter()],
+                  decoration: const InputDecoration(labelText: 'Jumlah (Rp)'),
+                ),
+                TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Keterangan')),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) setDialogState(() => selectedDate = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(6)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                        const Icon(Icons.calendar_today, size: 18),
+                      ],
+                    ),
+                  ),
+                )
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  onDeleteIncome(tx.id);
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (amountCtrl.text.isNotEmpty) {
+                    final cleanAmount = amountCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+                    tx.amount = double.parse(cleanAmount);
+                    tx.note = noteCtrl.text;
+                    tx.date = selectedDate;
+                    onEditIncome(tx);
+                    Navigator.pop(ctx);
+                  }
+                },
+                child: const Text('Simpan'),
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -939,10 +1065,18 @@ class IncomeTab extends StatelessWidget {
                     final tx = transactions[i];
                     return Card(
                       child: ListTile(
+                        onTap: () => _showEditIncomeDialog(context, tx),
                         leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.arrow_downward, color: Colors.white)),
                         title: Text(tx.pocketName),
                         subtitle: Text('${DateFormat('dd MMM yyyy').format(tx.date)}${tx.note.isNotEmpty ? ' - ${tx.note}' : ''}'),
-                        trailing: Text('+ ${currencyFormatter.format(tx.amount)}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('+ ${currencyFormatter.format(tx.amount)}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.chevron_right, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -1247,6 +1381,7 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                         child: TextField(
                           controller: amountController,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [ThousandsSeparatorInputFormatter()],
                           decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
                         ),
                       ),
@@ -1294,12 +1429,14 @@ class _TransactionFormPageState extends State<TransactionFormPage> {
                     pName = selectedIncomeCategory ?? 'Gaji';
                   }
 
+                  final cleanAmountStr = amountController.text.replaceAll(RegExp(r'[^\d]'), '');
+
                   final item = TransactionItem(
                     id: DateTime.now().toString(),
                     type: selectedType,
                     pocketId: pId,
                     pocketName: pName,
-                    amount: double.parse(amountController.text),
+                    amount: double.parse(cleanAmountStr),
                     note: noteController.text,
                     date: selectedDate,
                   );
