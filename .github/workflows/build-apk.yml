@@ -42,7 +42,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          flutter pub add intl fl_chart
+          flutter pub add intl fl_chart shared_preferences
+          flutter pub get
 
       - name: Build APK Release
         run: flutter build apk --release --no-tree-shake-icons
