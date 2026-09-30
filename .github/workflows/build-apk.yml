@@ -1,4 +1,0 @@
-- name: Install Dependencies
-        run: |
-          flutter pub add intl fl_chart shared_preferences file_saver path_provider
-          flutter pub get
